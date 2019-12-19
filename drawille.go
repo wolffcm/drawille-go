@@ -4,9 +4,9 @@ package drawille
 import "math"
 
 var pixel_map = [4][2]int{
-	{0x1, 0x8},
-	{0x2, 0x10},
-	{0x4, 0x20},
+	{0x01, 0x08},
+	{0x02, 0x10},
+	{0x04, 0x20},
 	{0x40, 0x80}}
 
 // Braille chars start at 0x2800
@@ -28,13 +28,18 @@ func getPixel(y, x int) int {
 }
 
 type Canvas struct {
+	cfg Config
+
 	LineEnding string
 	chars      map[int]map[int]int
 }
 
 // Make a new canvas
-func NewCanvas() Canvas {
+func NewCanvas(os ...Option) Canvas {
 	c := Canvas{LineEnding: "\n"}
+	for _, o := range os {
+		o(&c.cfg)
+	}
 	c.Clear()
 	return c
 }
@@ -210,7 +215,11 @@ func (c *Canvas) DrawLine(x1, y1, x2, y2 float64) {
 		if xdiff != 0 {
 			x += (float64(i) * xdiff) / (r * xdir)
 		}
-		c.Toggle(round(x), round(y))
+		if c.cfg.owb == overwriteToggle {
+			c.Toggle(round(x), round(y))
+		} else {
+			c.Set(round(x), round(y))
+		}
 	}
 }
 
