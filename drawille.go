@@ -1,7 +1,10 @@
 package drawille
 
 //import "code.google.com/p/goncurses"
-import "math"
+import (
+	"math"
+	"strings"
+)
 
 var pixel_map = [4][2]int{
 	{0x01, 0x08},
@@ -32,15 +35,13 @@ type Canvas struct {
 
 	LineEnding string
 	chars      map[int]map[int]int
+	colors     map[int]map[int]int
 }
 
 // Make a new canvas
 func NewCanvas(os ...Option) Canvas {
 	c := Canvas{LineEnding: "\n"}
-	for _, o := range os {
-		o(&c.cfg)
-	}
-	c.Clear()
+	c.Clear(os...)
 	return c
 }
 
@@ -89,8 +90,12 @@ func (c Canvas) MinX() int {
 }
 
 // Clear all pixels
-func (c *Canvas) Clear() {
+func (c *Canvas) Clear(os ...Option) {
 	c.chars = make(map[int]map[int]int)
+	c.colors = make(map[int]map[int]int)
+	for _, o := range os {
+		o(&c.cfg)
+	}
 }
 
 // Convert x,y to cols, rows
@@ -99,7 +104,7 @@ func (c Canvas) get_pos(x, y int) (int, int) {
 }
 
 // Set a pixel of c
-func (c *Canvas) Set(x, y int) {
+func (c *Canvas) Set(x, y int, color ...int) {
 	px, py := c.get_pos(x, y)
 	if m := c.chars[py]; m == nil {
 		c.chars[py] = make(map[int]int)
@@ -107,20 +112,29 @@ func (c *Canvas) Set(x, y int) {
 	val := c.chars[py][px]
 	mapv := getPixel(y, x)
 	c.chars[py][px] = val | mapv
+	if len(color) > 0 {
+		if m := c.colors[py]; m == nil {
+			c.colors[py] = make(map[int]int)
+		}
+		c.colors[py][px] = color[0]
+	}
 }
 
 // Unset a pixel of c
-func (c *Canvas) UnSet(x, y int) {
+func (c *Canvas) UnSet(x, y int, color ...int) {
 	px, py := c.get_pos(x, y)
 	x, y = int(math.Abs(float64(x))), int(math.Abs(float64(y)))
 	if m := c.chars[py]; m == nil {
 		c.chars[py] = make(map[int]int)
 	}
 	c.chars[py][px] = c.chars[py][px] &^ getPixel(y, x)
+	if len(color) > 0 {
+		c.colors[py][px] = color[0]
+	}
 }
 
 // Toggle a point
-func (c *Canvas) Toggle(x, y int) {
+func (c *Canvas) Toggle(x, y int, color ...int) {
 	px, py := c.get_pos(x, y)
 	if (c.chars[py][px] & getPixel(y, x)) != 0 {
 		c.UnSet(x, y)
@@ -158,19 +172,36 @@ func (c Canvas) GetCharacter(x, y int) rune {
 	return c.GetScreenCharacter(x/4,y/4)
 }
 
+func (c Canvas) colorize(rownum, x int,  s string) string {
+	if c.cfg.pallette == nil {
+		return s
+	}
+
+	if fnId, ok := c.colors[rownum][x]; ok {
+		fn := c.cfg.pallette[fnId]
+		return fn(s)
+	}
+	return s
+}
+
 // Retrieve the rows from a given view
 func (c Canvas) Rows(minX, minY, maxX, maxY int) []string {
 	minrow, maxrow := minY/4, (maxY)/4
 	mincol, maxcol := minX/2, (maxX)/2
+	var sb strings.Builder
 
 	ret := make([]string, 0)
 	for rownum := minrow; rownum < (maxrow + 1); rownum = rownum + 1 {
-		row := ""
 		for x := mincol; x < (maxcol + 1); x = x + 1 {
 			char := c.chars[rownum][x]
-			row += string(rune(char + braille_char_offset))
+			// TODO(cwolff): make this more compact
+			s := string(rune(char + braille_char_offset))
+
+			s = c.colorize(rownum, x, s)
+			sb.WriteString(s)
 		}
-		ret = append(ret, row)
+		ret = append(ret, sb.String())
+		sb.Reset()
 	}
 	return ret
 }
@@ -189,7 +220,7 @@ func (c Canvas) String() string {
 	return c.Frame(c.MinX(), c.MinY(), c.MaxX(), c.MaxY())
 }
 
-func (c *Canvas) DrawLine(x1, y1, x2, y2 float64) {
+func (c *Canvas) DrawLine(x1, y1, x2, y2 float64, color ...int) {
 	xdiff := math.Abs(x1 - x2)
 	ydiff := math.Abs(y2 - y1)
 
@@ -215,10 +246,10 @@ func (c *Canvas) DrawLine(x1, y1, x2, y2 float64) {
 		if xdiff != 0 {
 			x += (float64(i) * xdiff) / (r * xdir)
 		}
-		if c.cfg.owb == overwriteToggle {
-			c.Toggle(round(x), round(y))
+		if c.cfg.overwrite == overwriteToggle {
+			c.Toggle(round(x), round(y), color...)
 		} else {
-			c.Set(round(x), round(y))
+			c.Set(round(x), round(y), color...)
 		}
 	}
 }
