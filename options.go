@@ -4,13 +4,19 @@ type Option func(cfg *Config)
 
 func SaturateOnOverwrite() Option {
 	return func(cfg *Config) {
-		cfg.owb = overwriteSaturate
+		cfg.overwrite = overwriteSaturate
 	}
 }
 
 func ToggleOnOverwrite() Option {
 	return func(cfg *Config) {
-		cfg.owb = overwriteToggle
+		cfg.overwrite = overwriteToggle
+	}
+}
+
+func SetPalette(p Palette) Option {
+	return func(cfg *Config) {
+		cfg.pallette = p
 	}
 }
 
@@ -20,6 +26,9 @@ const (
 	overwriteSaturate
 )
 
+type Palette map[int]func(string) string
+
 type Config struct {
-	owb overwriteBehavior
+	overwrite overwriteBehavior
+	pallette Palette
 }
